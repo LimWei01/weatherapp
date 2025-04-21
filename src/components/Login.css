@@ -1,0 +1,74 @@
+.auth-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.auth-links a {
+  color: #4a90e2;
+  text-decoration: none;
+  font-size: 14px;
+  transition: color 0.3s ease;
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
+.auth-links a:hover {
+  color: #357abd;
+  text-decoration: underline;
+}
+
+.forgot-password-container {
+  margin-top: 10px;
+}
+
+.forgot-password {
+  color: #666;
+  font-size: 14px;
+  text-decoration: none;
+  transition: color 0.3s ease;
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
+.forgot-password:hover {
+  color: #4a90e2;
+  text-decoration: underline;
+}
+
+.auto-signin-message {
+  text-align: center;
+  margin: 20px 0;
+  padding: 15px;
+  background-color: #e8f5ff;
+  border-radius: 8px;
+  color: #0078d4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.auto-signin-message p {
+  margin: 0;
+  font-size: 16px;
+}
+
+.cancel-button {
+  background-color: transparent;
+  border: 1px solid #0078d4;
+  color: #0078d4;
+  padding: 5px 15px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.cancel-button:hover {
+  background-color: #f0f0f0;
+} 

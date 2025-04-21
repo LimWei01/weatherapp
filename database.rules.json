@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid",
+        "locations": {
+          ".read": "$uid === auth.uid",
+          ".write": "$uid === auth.uid",
+          "$locationId": {
+            ".validate": "newData.hasChildren(['name', 'lat', 'lon', 'timestamp'])",
+            "name": { ".validate": "newData.isString()" },
+            "lat": { ".validate": "newData.isNumber()" },
+            "lon": { ".validate": "newData.isNumber()" },
+            "timestamp": { ".validate": "newData.isNumber()" },
+            "country": { ".validate": "newData.isString()" },
+            "state": { ".validate": "newData.isString()" },
+            "$other": { ".validate": false }
+          }
+        }
+      }
+    }
+  }
+} 

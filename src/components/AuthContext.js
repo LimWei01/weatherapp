@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { auth, db } from '../firebase';  // Update this line if needed
+import { auth, db, googleProvider } from '../firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, 
          onAuthStateChanged, GoogleAuthProvider, signInWithPopup, 
-         sendPasswordResetEmail, sendEmailVerification } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+         sendPasswordResetEmail, sendEmailVerification, fetchSignInMethodsForEmail } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
+
+// Set up a token refresh interval (in minutes)
+const TOKEN_REFRESH_INTERVAL = 45; // minutes
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -15,6 +18,19 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Function to refresh the auth token
+  async function refreshAuthToken() {
+    try {
+      if (auth.currentUser) {
+        console.log('Refreshing Firebase auth token');
+        await auth.currentUser.getIdToken(true);
+        console.log('Token refreshed successfully');
+      }
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+    }
+  }
 
   async function signup(email, password, displayName) {
     try {
@@ -41,17 +57,39 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      await userCredential.user.reload();
+      const user = userCredential.user;
       
-      if (!userCredential.user.emailVerified) {
+      // Reload user to get latest state
+      await user.reload();
+      
+      // Check if this is a Google-authenticated user
+      const isGoogleUser = user.providerData.some(provider => provider.providerId === 'google.com');
+      
+      // Only enforce email verification for non-Google users
+      if (!user.emailVerified && !isGoogleUser) {
         await signOut(auth);
-        throw new Error('Please verify your email before logging in.');
+        throw new Error('Please verify your email before logging in. Check your inbox for a verification link.');
       }
+      
+      // Update currentUser state
+      setCurrentUser(user);
       
       return userCredential;
     } catch (error) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        throw new Error('Invalid email or password');
+      console.error('Login error:', error);
+      if (error.code === 'auth/user-not-found') {
+        throw new Error('No account found with this email. Please sign up first.');
+      } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        // Check if this might be a Google account without password
+        try {
+          const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+          if (signInMethods.includes('google.com') && !signInMethods.includes('password')) {
+            throw new Error('This account uses Google Sign-In. Please use the Google Sign-In button or set a password.');
+          }
+        } catch (secondaryError) {
+          console.error('Error checking sign-in methods:', secondaryError);
+        }
+        throw new Error('Incorrect password. Please try again or reset your password.');
       }
       throw error;
     }
@@ -62,8 +100,67 @@ export function AuthProvider({ children }) {
   }
 
   function googleSignIn() {
-    const provider = new GoogleAuthProvider();
-    return signInWithPopup(auth, provider);
+    return new Promise(async (resolve, reject) => {
+      try {
+        setLoading(true);
+        console.log("Starting Google sign-in process");
+        
+        // Sign in with Google
+        const result = await signInWithPopup(auth, googleProvider);
+        console.log('Google sign-in successful, user:', result.user.email);
+
+        // Create or update user document in Firestore
+        const userRef = doc(db, "users", result.user.uid);
+        
+        // Check if user document already exists
+        const userDoc = await getDoc(userRef);
+        
+        if (userDoc.exists()) {
+          // Update the document while preserving saved locations
+          const userData = userDoc.data();
+          await setDoc(userRef, {
+            email: result.user.email,
+            displayName: result.user.displayName,
+            lastSignInTime: new Date().toISOString(),
+            emailVerified: true,
+            // Keep existing saved locations if they exist
+            savedLocations: userData.savedLocations || []
+          }, { merge: true });
+          console.log('Updated existing user document with preserved saved locations');
+        } else {
+          // Create new user document
+          await setDoc(userRef, {
+            email: result.user.email,
+            displayName: result.user.displayName,
+            createdAt: new Date().toISOString(),
+            emailVerified: true,
+            savedLocations: []
+          });
+          console.log('Created new user document');
+        }
+
+        // Force a reload of the user to ensure state is updated
+        await result.user.reload();
+        
+        // Update the currentUser state
+        setCurrentUser(result.user);
+        console.log("Current user set after Google sign-in:", result.user.email);
+        
+        // Return the result
+        resolve(result);
+      } catch (error) {
+        console.error('Google sign in error:', error);
+        if (error.code === 'auth/too-many-requests') {
+          reject(new Error('Account temporarily disabled due to many failed login attempts. Reset your password or try again later.'));
+        } else if (error.code === 'auth/popup-closed-by-user') {
+          reject(new Error('Sign in was cancelled'));
+        } else {
+          reject(error);
+        }
+      } finally {
+        setLoading(false);
+      }
+    });
   }
 
   function resetPassword(email) {
@@ -71,12 +168,38 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Force a reload of the user to ensure we have the latest state
+        await user.reload();
+        setCurrentUser(user);
+        
+        // Refresh the token immediately on login
+        refreshAuthToken();
+      } else {
+        setCurrentUser(null);
+      }
       setLoading(false);
     });
+    
+    // Set up scheduled token refresh every TOKEN_REFRESH_INTERVAL minutes
+    const tokenRefreshInterval = setInterval(() => {
+      refreshAuthToken();
+    }, TOKEN_REFRESH_INTERVAL * 60 * 1000);
 
-    return unsubscribe;
+    // Add window unload event listener
+    const handleUnload = () => {
+      if (auth.currentUser) {
+        signOut(auth);
+      }
+    };
+    window.addEventListener('unload', handleUnload);
+
+    return () => {
+      unsubscribe();
+      clearInterval(tokenRefreshInterval);
+      window.removeEventListener('unload', handleUnload);
+    };
   }, []);
 
   const value = {
@@ -86,6 +209,7 @@ export function AuthProvider({ children }) {
     logout,
     googleSignIn,
     resetPassword,
+    refreshAuthToken,
     error,
     setError
   };

@@ -1,232 +1,396 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from './AuthContext';
-import { useNavigate } from 'react-router-dom';
-import Header from './Header';
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
+import {
+  FaSearch,
+  FaLocationArrow,
+  FaStar,
+  FaRegStar,
+  FaExclamationTriangle,
+  FaSave
+} from 'react-icons/fa';
 import CurrentWeather from './CurrentWeather';
-import FiveDayForecast from './FiveDayForecast';
-import Highlights from './Highlights';
-import HourlyForecast from './HourlyForecast';
+import WeatherForecast from './WeatherForecast';
 import Loading from './Loading';
-import SavedLocations from './SavedLocations';
 import WeatherAlert from './WeatherAlert';
+import SavedLocations from './SavedLocations';
+import AirQuality from './AirQuality';
+import TemperatureChart from './TemperatureChart';
+import HumidityChart from './HumidityChart';
+import WindSpeedChart from './WindSpeedChart';
+import '../styles/WeatherDashboard.css';
+import '../styles/WeatherAlert.css';
 
-function WeatherDashboard() {
+// Import Firestore utilities directly
+import { saveLocationToFirestore } from '../utilities/firestoreUtils';
+import { useAuth } from './AuthContext';
+
+// Get API key from environment variables and ensure it's clean (no quotes)
+const API_KEY = process.env.REACT_APP_WEATHER_API_KEY?.replace(/"/g, '');
+
+const WeatherDashboard = () => {
+  const [location, setLocation] = useState('');
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [weatherData, setWeatherData] = useState(null);
-  const [forecastData, setForecastData] = useState(null);
-  const [airQualityData, setAirQualityData] = useState(null);
-  const [location, setLocation] = useState({
-    name: '',
-    lat: null,
-    lon: null,
-    country: '',
-    state: ''
-  });
-  const [loading, setLoading] = useState(true);
+  const [forecast, setForecast] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const API_KEY = '581263763b8a617d8fec01441f571a23';
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-  const handleSavedLocationSelect = (location) => {
-    setLocation(location);
-    fetchWeatherData(location.name, location.lat, location.lon, location.country, location.state);
-  };
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [alerts, setAlerts] = useState([]);
+  const [airQualityData, setAirQualityData] = useState(null);
+  const [showSavedLocations, setShowSavedLocations] = useState(false);
+  // Add state for current location weather data
+  const [currentLocationWeatherData, setCurrentLocationWeatherData] = useState(null);
+  const [currentLocationAirQualityData, setCurrentLocationAirQualityData] = useState(null);
+  const [isCurrentLocationActive, setIsCurrentLocationActive] = useState(true);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [originalSearchTerm, setOriginalSearchTerm] = useState('');
+  const [locationSaved, setLocationSaved] = useState(false);
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
 
+  // Get current user from AuthContext
+  const { currentUser, refreshAuthToken } = useAuth();
 
-  const fetchWeatherData = async (name, lat, lon, country, state) => {
+  // Function to get current location
+  const handleGetCurrentLocation = useCallback(() => {
+    setLoading(true);
+    setIsCurrentLocationActive(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          fetchWeatherData(latitude, longitude, true);
+          setCurrentLocation({ latitude, longitude });
+        },
+        (err) => {
+          setError(`Error getting location: ${err.message}`);
+          setLoading(false);
+        }
+      );
+    } else {
+      setError('Geolocation is not supported by this browser.');
+      setLoading(false);
+    }
+  }, []);
+
+  // Modified to handle current location vs searched location
+  const fetchWeatherData = async (lat, lon, isCurrentLocation = false) => {
     setLoading(true);
     setError(null);
-    setLocation({ name, lat, lon, country, state });
 
     try {
-      // Fetch current weather
-      const weatherResponse = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}`
+      // Current weather
+      const weatherResponse = await axios.get(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`
       );
-      if (!weatherResponse.ok) {
-        throw new Error('Failed to fetch current weather');
-      }
-      const weatherData = await weatherResponse.json();
-      setWeatherData(weatherData);
 
-      // Fetch forecast
-      const forecastResponse = await fetch(
-        `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}`
+      // 5-day forecast
+      const forecastResponse = await axios.get(
+        `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`
       );
-      if (!forecastResponse.ok) {
-        throw new Error('Failed to fetch forecast data');
-      }
-      const forecastData = await forecastResponse.json();
-      setForecastData(forecastData);
 
-      // Fetch air quality
-      const airQualityResponse = await fetch(
+      // Air quality data
+      const airQualityResponse = await axios.get(
         `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${API_KEY}`
       );
-      if (!airQualityResponse.ok) {
-        throw new Error('Failed to fetch air quality data');
+
+      if (isCurrentLocation) {
+        setCurrentLocationWeatherData(weatherResponse.data);
+        setCurrentLocationAirQualityData(airQualityResponse.data);
+        // If this is the first load or if we're explicitly loading current location
+        if (isCurrentLocationActive) {
+          setWeatherData(weatherResponse.data);
+          setForecast(forecastResponse.data);
+          setAirQualityData(airQualityResponse.data);
+          setLocation(weatherResponse.data.name);
+        }
+      } else {
+        // For searched location
+        setIsCurrentLocationActive(false);
+        setWeatherData(weatherResponse.data);
+        setForecast(forecastResponse.data);
+        setAirQualityData(airQualityResponse.data);
+        setLocation(weatherResponse.data.name);
       }
-      const airQualityData = await airQualityResponse.json();
-      setAirQualityData(airQualityData);
       
       setLoading(false);
-    } catch (error) {
-      console.error("Error fetching weather data:", error);
-      setError(error.message);
+    } catch (err) {
+      setError(`Error fetching weather data: ${err.message}`);
       setLoading(false);
     }
   };
 
-  const handleCitySearch = async (cityName) => {
-    if (!cityName.trim()) return;
+  // Search for location
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!location.trim()) return;
 
     setLoading(true);
     setError(null);
     
+    // Store original search term
+    const originalSearchTerm = location.trim();
+
     try {
-      const geocodingResponse = await fetch(
-        `https://api.openweathermap.org/geo/1.0/direct?q=${cityName}&limit=1&appid=${API_KEY}`
+      const locationResponse = await axios.get(
+        `https://api.openweathermap.org/geo/1.0/direct?q=${originalSearchTerm}&limit=1&appid=${API_KEY}`
       );
-      if (!geocodingResponse.ok) {
-        throw new Error(`Failed to fetch coordinates for ${cityName}`);
-      }
-      const data = await geocodingResponse.json();
 
-      if (data.length === 0) {
-        throw new Error(`City "${cityName}" not found`);
+      if (locationResponse.data.length === 0) {
+        setError('Location not found. Please try another search term.');
+        setLoading(false);
+        return;
       }
 
-      const { name, lat, lon, country, state } = data[0];
-      fetchWeatherData(name, lat, lon, country || '', state || '');
-    } catch (error) {
-      console.error("Error fetching city coordinates:", error);
-      setError(error.message);
+      const { lat, lon, name } = locationResponse.data[0];
+      // Store both the API-returned name and the original search term
+      setLocation(name);
+      // Store the original search term in state for later use
+      setOriginalSearchTerm(originalSearchTerm);
+      fetchWeatherData(lat, lon, false);
+    } catch (err) {
+      setError(`Error searching for location: ${err.message}`);
       setLoading(false);
     }
   };
 
-  const handleGetCurrentLocation = () => {
-    if (navigator.geolocation) {
-      setLoading(true);
-      setError(null);
+  // Save current displayed location
+  const handleSaveLocation = async () => {
+    if (!weatherData) return;
+    
+    const locationToSave = {
+      name: weatherData.name,
+      country: weatherData.sys?.country || '',
+      lat: weatherData.coord.lat,
+      lon: weatherData.coord.lon,
+      saved_at: new Date().toISOString()
+    };
+    
+    try {
+      // Only save to Firestore if user is logged in
+      if (!currentUser) {
+        setSaveMessage('Please log in to save locations');
+        setTimeout(() => {
+          setSaveMessage('');
+        }, 3000);
+        return;
+      }
       
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-
+      setIsSavingLocation(true);
+      
+      // Save to Firestore directly
+      try {
+        await saveLocationToFirestore(
+          currentUser.uid, 
+          locationToSave, 
+          originalSearchTerm !== weatherData.name ? originalSearchTerm : null
+        );
+        
+        setSaveMessage(`${weatherData.name} saved to locations`);
+        // Toggle to trigger update in SavedLocations, using function form to ensure we get the latest state
+        setLocationSaved(prev => !prev);
+        setTimeout(() => {
+          setSaveMessage('');
+        }, 3000);
+      } catch (error) {
+        console.error("Error saving location to Firestore:", error);
+        
+        // Check if it's an authentication error
+        if (error.code === 'permission-denied' || error.code === 'unauthenticated' || 
+            error.message?.includes('authentication') || error.message?.includes('session')) {
+          console.log('Attempting to refresh auth token');
+          
           try {
-            const reverseGeocodingResponse = await fetch(
-              `https://api.openweathermap.org/geo/1.0/reverse?lat=${latitude}&lon=${longitude}&limit=1&appid=${API_KEY}`
+            // Try to refresh the token
+            await refreshAuthToken();
+            
+            // Try saving again
+            await saveLocationToFirestore(
+              currentUser.uid, 
+              locationToSave, 
+              originalSearchTerm !== weatherData.name ? originalSearchTerm : null
             );
-            if (!reverseGeocodingResponse.ok) {
-              throw new Error('Failed to fetch location information');
-            }
-            const data = await reverseGeocodingResponse.json();
-
-            if (data.length === 0) {
-              throw new Error("Could not find location information");
-            }
-
-            const { name, country, state } = data[0];
-            fetchWeatherData(name, latitude, longitude, country || '', state || '');
-          } catch (error) {
-            console.error("Error fetching reverse geocoding:", error);
-            setError(error.message);
-            setLoading(false);
+            
+            setSaveMessage(`${weatherData.name} saved to locations`);
+            setLocationSaved(prev => !prev);
+            setTimeout(() => {
+              setSaveMessage('');
+            }, 3000);
+          } catch (refreshError) {
+            console.error("Error after token refresh:", refreshError);
+            setSaveMessage('Authentication error. Please try logging out and logging back in.');
+            setTimeout(() => {
+              setSaveMessage('');
+            }, 5000);
           }
-        },
-        (error) => {
-          setLoading(false);
-          if (error.code === error.PERMISSION_DENIED) {
-            setError('Geolocation permission denied. Please reset location permission to grant access again');
-          } else {
-            setError('Failed to get current location');
-          }
+        } else {
+          setSaveMessage(`Failed to save location: ${error.message}`);
+          setTimeout(() => {
+            setSaveMessage('');
+          }, 3000);
         }
-      );
-    } else {
-      setError("Geolocation is not supported by this browser");
+      }
+    } catch (error) {
+      console.error("Error saving location:", error);
+      setSaveMessage(`Failed to save location: ${error.message}`);
+      setTimeout(() => {
+        setSaveMessage('');
+      }, 3000);
+    } finally {
+      setIsSavingLocation(false);
     }
   };
 
+  // Initial load - get current location
   useEffect(() => {
     handleGetCurrentLocation();
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (error) {
-      setError('Failed to log out');
+  }, [handleGetCurrentLocation]);
+  
+  // Clear searched location data if the user views only current data
+  useEffect(() => {
+    if (isCurrentLocationActive && weatherData !== currentLocationWeatherData) {
+      setWeatherData(currentLocationWeatherData);
+      setAirQualityData(currentLocationAirQualityData);
     }
+  }, [isCurrentLocationActive, currentLocationWeatherData, currentLocationAirQualityData, weatherData]);
+
+  // Handler for dismissing an alert
+  const handleDismissAlert = (alertId) => {
+    setAlerts(prevAlerts => prevAlerts.filter(alert => alert.id !== alertId));
   };
 
+  // Toggle saved locations panel
+  const toggleSavedLocations = () => {
+    setShowSavedLocations(!showSavedLocations);
+  };
+
+  // Select a saved location
+  const handleSelectLocation = (locationName) => {
+    setLocation(locationName);
+    // Create a proper search rather than an empty form event
+    setLoading(true);
+    setError(null);
+    
+    // Store the original search term
+    const originalSearchTerm = locationName.trim();
+    setOriginalSearchTerm(originalSearchTerm);
+    
+    // Directly search for the location
+    axios.get(`https://api.openweathermap.org/geo/1.0/direct?q=${originalSearchTerm}&limit=1&appid=${API_KEY}`)
+      .then(locationResponse => {
+        if (locationResponse.data.length === 0) {
+          setError('Location not found. Please try another search term.');
+          setLoading(false);
+          return;
+        }
+
+        const { lat, lon, name } = locationResponse.data[0];
+        // Fetch weather data for the selected location
+        fetchWeatherData(lat, lon, false);
+      })
+      .catch(err => {
+        setError(`Error searching for location: ${err.message}`);
+        setLoading(false);
+      });
+    
+    // Close the saved locations panel
+    setShowSavedLocations(false);
+  };
+
+  // Modified to only show saved locations when a location is saved
   return (
-    <div className="container">
-      <Header 
-        onCitySearch={handleCitySearch}
-        onGetCurrentLocation={handleGetCurrentLocation}
-        onLogout={handleLogout}
-      />
-      <SavedLocations 
-        onLocationSelect={handleSavedLocationSelect}
-        currentLocation={location}
-      />
-      {weatherData && (
-        <WeatherAlert 
-          lat={weatherData.coord.lat} 
-          lon={weatherData.coord.lon} 
-        />
-      )}
-      
-      {error && (
-        <div style={{ 
-          backgroundColor: '#ff5252', 
-          color: 'white', 
-          padding: '15px', 
-          borderRadius: '5px',
-          marginBottom: '15px',
-          textAlign: 'center'
-        }}>
-          {error}
+    <div className="weather-dashboard">
+      {/* Search and controls */}
+      <div className="weather-controls">
+        <form onSubmit={handleSearch} className="search-form">
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Search for a location..."
+            className="search-input"
+          />
+          <button type="submit" className="search-button">
+            <FaSearch />
+          </button>
+        </form>
+        
+        <div className="control-buttons">
+          <button onClick={handleGetCurrentLocation} className="location-button" title="Get current location">
+            <FaLocationArrow />
+          </button>
+          <button 
+            onClick={handleSaveLocation} 
+            className="save-button" 
+            title="Save current location"
+            disabled={isSavingLocation}
+          >
+            {isSavingLocation ? '...' : <FaSave />}
+          </button>
+          <button onClick={toggleSavedLocations} className="saved-locations-button">
+            Saved Locations
+          </button>
+        </div>
+      </div>
+
+      {/* Save message */}
+      {saveMessage && (
+        <div className="save-message">
+          {saveMessage}
         </div>
       )}
-      
-      {loading ? (
-        <Loading />
-      ) : (
-        <div className="weather-data">
-          <div className="weather-left">
-            {weatherData && (
-              <CurrentWeather 
-                weatherData={weatherData} 
-                location={location} 
-              />
-            )}
-            
-            {forecastData && (
-              <FiveDayForecast forecastData={forecastData} />
-            )}
-          </div>
+
+      {/* Error message */}
+      {error && <div className="error-message">{error}</div>}
+
+      {/* Weather alerts */}
+      {(weatherData || currentLocationWeatherData) && (
+        <WeatherAlert 
+          weatherData={weatherData}
+          airQualityData={airQualityData}
+          currentLocationWeatherData={currentLocationWeatherData}
+          currentLocationAirQualityData={currentLocationAirQualityData}
+          onDismiss={handleDismissAlert}
+        />
+      )}
+
+      {/* Saved locations panel - only show when toggled AND either when showing saved locations or when a location was just saved */}
+      {showSavedLocations && (
+        <SavedLocations 
+          onSelectLocation={handleSelectLocation} 
+          locationSaved={locationSaved} 
+          currentLocation={weatherData ? {
+            name: weatherData.name,
+            lat: weatherData.coord.lat,
+            lon: weatherData.coord.lon,
+            country: weatherData.sys?.country || ''
+          } : null}
+        />
+      )}
+
+      {/* Weather data display */}
+      {weatherData && (
+        <div className="weather-content">
+          {/* Current weather */}
+          <CurrentWeather weather={weatherData} />
+
+          {/* Air quality */}
+          {airQualityData && <AirQuality airQualityData={airQualityData} />}
+
+          {/* Temperature Chart */}
+          {forecast && <TemperatureChart forecastData={forecast} />}
           
-          <div className="weather-right">
-            <h2>Today's Highlights</h2>
-            {weatherData && airQualityData && (
-              <Highlights 
-                weatherData={weatherData} 
-                airQualityData={airQualityData} 
-              />
-            )}
-            
-            <h2>Today at</h2>
-            {forecastData && (
-              <HourlyForecast forecastData={forecastData} />
-            )}
-          </div>
+          {/* Humidity Chart */}
+          {forecast && <HumidityChart forecastData={forecast} />}
+          
+          {/* Wind Speed Chart */}
+          {forecast && <WindSpeedChart forecastData={forecast} />}
+
+          {/* Forecast */}
+          {forecast && <WeatherForecast forecast={forecast} />}
         </div>
       )}
     </div>
   );
-}
+};
 
 export default WeatherDashboard;

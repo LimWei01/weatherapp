@@ -2,17 +2,22 @@
 import React from 'react';
 import { useTemperature } from './TemperatureContext';
 
-function CurrentWeather({ weatherData, location }) {
+function CurrentWeather({ weather }) {
   const { isCelsius } = useTemperature();
   
-  const kelvinToCelsius = (temp) => {
-    return (temp - 273.15).toFixed(2);
-  };
-
-  const kelvinToFahrenheit = (temp) => {
-    return ((temp - 273.15) * 9/5 + 32).toFixed(2);
-  };
-
+  // Early return if weather data is not provided or incomplete
+  if (!weather || !weather.main || !weather.weather || !weather.weather[0]) {
+    return <div className="card">Loading weather data...</div>;
+  }
+  
+  // Temperature is already in Celsius from the API (units=metric in the API call)
+  const displayTemp = isCelsius 
+    ? `${Math.round(weather.main.temp)}°C` 
+    : `${Math.round((weather.main.temp * 9/5) + 32)}°F`;
+    
+  const feelsLike = isCelsius 
+    ? `${Math.round(weather.main.feels_like)}°C`
+    : `${Math.round((weather.main.feels_like * 9/5) + 32)}°F`;
 
   const date = new Date();
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -23,22 +28,14 @@ function CurrentWeather({ weatherData, location }) {
       <div className="current-weather">
         <div className="details">
           <p>Now</p>
-          <h1>
-          {isCelsius 
-            ? `${kelvinToCelsius(weatherData.main.temp)}°C` 
-            : `${kelvinToFahrenheit(weatherData.main.temp)}°F`
-          }
-        </h1>
-        <p>Feels like: {isCelsius 
-          ? `${kelvinToCelsius(weatherData.main.feels_like)}°C`
-          : `${kelvinToFahrenheit(weatherData.main.feels_like)}°F`
-        }</p>
-          <p>{weatherData.weather[0].description}</p>
+          <h1>{displayTemp}</h1>
+          <p>Feels like: {feelsLike}</p>
+          <p>{weather.weather[0].description}</p>
         </div>
         <div className="weather-icon">
           <img
-            src={`https://openweathermap.org/img/wn/${weatherData.weather[0].icon}@2x.png`}
-            alt={weatherData.weather[0].description}
+            src={`https://openweathermap.org/img/wn/${weather.weather[0].icon}@2x.png`}
+            alt={weather.weather[0].description}
           />
         </div>
       </div>
@@ -46,11 +43,11 @@ function CurrentWeather({ weatherData, location }) {
       <div className="card-footer">
         <p>
           <i className="fa-light fa-calendar"></i>
-          {`${days[date.getDay()]}, ${date.getDate()}, ${months[date.getMonth()]} ${date.getFullYear()}`}
+          {`${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`}
         </p>
         <p>
           <i className="fa-light fa-location-dot"></i>
-          {`${location.name}, ${location.country}`}
+          {`${weather.name}${weather.sys && weather.sys.country ? `, ${weather.sys.country}` : ''}`}
         </p>
       </div>
     </div>

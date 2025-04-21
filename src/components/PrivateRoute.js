@@ -10,8 +10,10 @@ export default function PrivateRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  // Redirect to login if email is not verified
-  if (!currentUser.emailVerified) {
+  // Only check email verification for non-Google users
+  const isGoogleUser = currentUser.providerData.some(provider => provider.providerId === 'google.com');
+  
+  if (!currentUser.emailVerified && !isGoogleUser) {
     return <Navigate to="/login" replace />;
   }
 
