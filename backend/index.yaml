@@ -1,0 +1,6 @@
+indexes:
+  - kind: Alert
+    ancestor: yes
+    properties:
+      - name: timestamp
+        direction: desc

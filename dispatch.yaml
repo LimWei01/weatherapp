@@ -1,0 +1,16 @@
+dispatch:
+  # Route API requests to the backend service
+  - url: "*/api/*"
+    service: backend-api
+
+  # Add health check routes
+  - url: "*/health*"
+    service: backend-api
+
+  # Add metrics endpoint
+  - url: "*/metrics"
+    service: backend-api
+
+  # Route all other requests to the frontend service
+  - url: "*/*"
+    service: default

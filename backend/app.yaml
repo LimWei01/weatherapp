@@ -1,0 +1,28 @@
+runtime: nodejs20
+service: backend-api
+
+instance_class: F2
+
+env_variables:
+  NODE_ENV: "production"
+  FRONTEND_URL: "https://weatherapp-456015.web.app,https://weatherapp-456015.as.r.appspot.com"
+  LOG_LEVEL: "INFO"
+  # Use Secret Manager reference instead of inline credentials
+  SERVICE_ACCOUNT_KEY: "${sm://projects/weatherapp-456015/secrets/service-account-key/versions/latest}"
+  CORS_ALLOW_ORIGIN: "https://weatherapp-456015.web.app,https://weatherapp-456015.as.r.appspot.com,https://weatherapp-456015.uc.r.appspot.com,https://weatherapp-456015.appspot.com,https://backend-api-dot-weatherapp-456015.as.r.appspot.com"
+
+handlers:
+  - url: /.*
+    script: auto
+    secure: always
+
+automatic_scaling:
+  min_instances: 1  # Ensure at least one instance is always running
+  max_instances: 15
+  min_idle_instances: 1  # Keep at least one idle instance
+  max_idle_instances: 5
+  target_cpu_utilization: 0.65
+  target_throughput_utilization: 0.6
+  max_concurrent_requests: 80
+  min_pending_latency: 30ms
+  max_pending_latency: 100ms

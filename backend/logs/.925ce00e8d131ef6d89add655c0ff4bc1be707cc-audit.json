@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/Users/limwei/weatherapp-2/backend/logs/.925ce00e8d131ef6d89add655c0ff4bc1be707cc-audit.json",
+    "files": [
+        {
+            "date": 1746199745045,
+            "name": "/Users/limwei/weatherapp-2/backend/logs/access-2025-05-02.log",
+            "hash": "3d1fd4b16dc0b923b0df35a8fb5325869b42736472ffe76fc4fd8e2edb403993"
+        },
+        {
+            "date": 1746203718688,
+            "name": "/Users/limwei/weatherapp-2/backend/logs/access-2025-05-03.log",
+            "hash": "3a1da030576b857a6c4e115ca6e3382c7ade80fb7dca9d3e56bab83fb478a8de"
+        }
+    ],
+    "hashType": "sha256"
+}

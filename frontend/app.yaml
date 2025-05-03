@@ -1,0 +1,26 @@
+runtime: nodejs20
+
+handlers:
+  - url: /static
+    static_dir: build/static
+    secure: always
+
+  - url: /(.*\.(json|ico|js|png|jpg|jpeg|svg|css))$
+    static_files: build/\1
+    upload: build/.*\.(json|ico|js|png|jpg|jpeg|svg|css)$
+    secure: always
+
+  - url: /.*
+    static_files: build/index.html
+    upload: build/index.html
+    secure: always
+
+env_variables:
+  NODE_ENV: "production"
+
+automatic_scaling:
+  min_instances: 1
+  max_instances: 25
+  max_concurrent_requests: 100
+  min_pending_latency: 30ms  # Adding this for better control
+  max_pending_latency: 100ms # Adding this for better control

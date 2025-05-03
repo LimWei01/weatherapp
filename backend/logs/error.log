@@ -1,0 +1,4 @@
+[2025-04-30T07:29:03.940Z] [ERROR] Request failed: GET /api/monitoring 401 {"responseTime":"15.32ms","response":"{\"error\":\"Invalid token\"}"}
+[2025-04-30T07:30:00.623Z] [ERROR] Request failed: POST /login 401 {"responseTime":"3.10ms","response":"{\"error\":\"Unauthorized\"}"}
+[2025-04-30T07:30:53.140Z] [ERROR] Request failed: POST /login 401 {"responseTime":"0.53ms","response":"{\"error\":\"Unauthorized\"}"}
+[2025-04-30T07:32:17.042Z] [ERROR] Request failed: POST /login 401 {"responseTime":"1.16ms","response":"{\"error\":\"Unauthorized\"}"}
